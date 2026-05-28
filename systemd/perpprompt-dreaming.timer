@@ -1,0 +1,22 @@
+[Unit]
+Description=perpPROMPT DREAMING cadence — bird sleeps every 10-12h
+Documentation=https://github.com/ASIXicle/perpPROMPT
+
+[Timer]
+# First fire 4 hours after boot — significantly later than THINKING's 15min
+# offset, so the first hours after boot are THINKING-only. This intentionally
+# offsets DREAMING from THINKING's cadence so they don't pile up.
+OnBootSec=4h
+
+# 10h base interval + up to 2h randomized delay = 10-12h between cycles.
+# Bird dreams ~2x per day. Asymmetric vs THINKING's ~4-5x per day reflects
+# Wren's design: thinking is foreground work, dreaming is background drift.
+OnUnitActiveSec=10h
+RandomizedDelaySec=2h
+
+Persistent=true
+
+Unit=perpprompt-dreaming.service
+
+[Install]
+WantedBy=timers.target

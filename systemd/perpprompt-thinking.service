@@ -1,0 +1,44 @@
+[Unit]
+Description=perpPROMPT THINKING cycle — the bird wakes and processes its world
+Documentation=https://github.com/ASIXicle/perpPROMPT
+After=network-online.target llama-server.service llama-server-embedding.service
+Wants=network-online.target
+Requires=llama-server.service llama-server-embedding.service
+
+[Service]
+Type=oneshot
+User=perpbot
+Group=perpbot
+WorkingDirectory=/opt/perpbot
+
+# Optional env file. After naming ceremony, scaffold_bootstrap.py creates
+# /opt/perpbot/config/bird_env containing BIRD_NAME=<chosen>. The leading
+# dash makes the file optional so the unit can install pre-ceremony without
+# starting cleanly — useful for syntax validation before the bird exists.
+EnvironmentFile=-/opt/perpbot/config/bird_env
+
+# If BIRD_NAME is unset (pre-naming-ceremony), default to "unnamed" — this
+# will cause the cycle to fail loudly (no bootstrap_identity found for that
+# name) rather than silently running as an arbitrary string. Bird must be
+# named before timers fire.
+ExecStart=/opt/perpbot/venv/bin/python -m src.think --bird-name ${BIRD_NAME}
+
+# 30-minute hard cap. THINKING worst case is 10 turns × ~2min = 20min on
+# Sandy Bridge inference. 30min catches runaway model behavior without
+# killing legitimate slow cycles.
+TimeoutStartSec=1800
+
+# Logging: everything goes to the systemd journal. journalctl -u
+# perpprompt-thinking is the bird's THINKING trail.
+StandardOutput=journal
+StandardError=journal
+
+# Hardening (where compatible with the bird needing /opt/perpbot writes
+# for ChromaDB and config). Same shape as llama-server.service.
+ProtectSystem=strict
+ReadWritePaths=/opt/perpbot
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

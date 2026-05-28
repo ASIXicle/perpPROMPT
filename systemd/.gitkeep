@@ -1,0 +1,11 @@
+# This directory will hold the systemd units.
+#
+# Planned files:
+#   - perpprompt-thinking.service     ExecStart=python3 -m perpprompt.think
+#   - perpprompt-thinking.timer       OnUnitActiveSec=4h, offset :00
+#   - perpprompt-dreaming.service     ExecStart=python3 -m perpprompt.dream
+#   - perpprompt-dreaming.timer       OnUnitActiveSec=8h, offset :30
+#   - perpprompt-digest.service       Daily digest AMQ to Holden
+#   - perpprompt-digest.timer         OnCalendar=daily 08:00 America/Chicago
+#
+# Empty for now. Units land alongside the src/ scaffolding.

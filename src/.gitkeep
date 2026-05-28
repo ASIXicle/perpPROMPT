@@ -1,0 +1,12 @@
+# This directory will hold the Python implementation.
+#
+# Planned files:
+#   - context.py        Builds THINKING and DREAMING context dicts
+#   - think.py          THINKING cycle entry point (called by systemd)
+#   - dream.py          DREAMING cycle entry point (called by systemd)
+#   - config.py         Intervals, model selection, token budgets, secrets paths
+#   - mcp_client.py     Lightweight MCP client (adapted from newstron9000)
+#   - dream_feed.py     dream_feed_sample() + helpers (Knot is drafting)
+#   - logging_util.py   Structured JSON log emission for daily digest
+#
+# Empty for now. Scaffolding begins after Holden finalizes model choice.

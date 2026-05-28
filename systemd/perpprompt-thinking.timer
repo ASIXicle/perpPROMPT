@@ -1,0 +1,25 @@
+[Unit]
+Description=perpPROMPT THINKING cadence — bird wakes every 5-6h
+Documentation=https://github.com/ASIXicle/perpPROMPT
+
+[Timer]
+# First fire 15 minutes after boot — gives llama-server and llama-server-embedding
+# time to load models and stabilize. The Requires= on the .service file also
+# enforces dependency ordering, but the timer delay is gentler.
+OnBootSec=15min
+
+# 5h base interval + up to 1h randomized delay = 5-6h between cycles.
+# This is on the long end of Holden's 4-6h spec; bird wakes ~4-5 times per day.
+# Lower would burn more model compute; higher would let AMQ traffic stale.
+OnUnitActiveSec=5h
+RandomizedDelaySec=1h
+
+# Persistent=true means if the system was off when the timer would have
+# fired, it fires once at next boot to catch up. Avoids long gaps after
+# downtime.
+Persistent=true
+
+Unit=perpprompt-thinking.service
+
+[Install]
+WantedBy=timers.target

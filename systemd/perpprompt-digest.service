@@ -1,0 +1,30 @@
+[Unit]
+Description=perpPROMPT daily digest — the bird's morning report to Holden
+Documentation=https://github.com/ASIXicle/perpPROMPT
+After=network-online.target llama-server.service llama-server-embedding.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=perpbot
+Group=perpbot
+WorkingDirectory=/opt/perpbot
+
+EnvironmentFile=-/opt/perpbot/config/bird_env
+
+ExecStart=/opt/perpbot/venv/bin/python -m src.digest --bird-name ${BIRD_NAME}
+
+# 5-minute cap. Digest is mostly local ChromaDB reads + one MCP amq_send.
+# Should complete in <30 seconds normally. 5min covers MCP-side stalls.
+TimeoutStartSec=300
+
+StandardOutput=journal
+StandardError=journal
+
+ProtectSystem=strict
+ReadWritePaths=/opt/perpbot
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,18 @@
+[Unit]
+Description=perpPROMPT daily digest cadence — fires at 08:00 CDT every day
+Documentation=https://github.com/ASIXicle/perpPROMPT
+
+[Timer]
+# 08:00 in Holden's local timezone. systemd's OnCalendar with a TZ suffix
+# handles DST transitions automatically — fires at 08:00 wall-clock in
+# America/Chicago whether it's CDT or CST.
+OnCalendar=*-*-* 08:00:00 America/Chicago
+
+# If the bird was off when 08:00 came around (system reboot, llama-server
+# down, etc.), fire once at next boot to deliver the catch-up digest.
+Persistent=true
+
+Unit=perpprompt-digest.service
+
+[Install]
+WantedBy=timers.target
