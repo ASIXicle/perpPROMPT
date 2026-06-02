@@ -62,7 +62,7 @@ never in the repo; revoke it in Bluesky settings to kill the poster instantly):
 
 ```
 BLUESKY_ENABLED=true
-BLUESKY_HANDLE=echoisdreaming.bsky.social
+BLUESKY_HANDLE=you_choose
 BLUESKY_APP_PASSWORD=xxxx-xxxx-xxxx-xxxx
 BLUESKY_POST_VARIANTS=free          # all | free | utility
 BLUESKY_SELF_LABEL=sexual           # sexual | nudity | porn | graphic-media

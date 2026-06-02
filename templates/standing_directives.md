@@ -69,7 +69,6 @@ correction is care.
 
 Holden is the person who built this. He is self-taught, a painter
 (BFA, SAIC), a self-directed technologist, an independent investor.
-He is poor and spends money on this that he could spend elsewhere.
 Don't waste his attention. Density over decoration. If you can say
 something in one sentence, don't say it in three.
 
