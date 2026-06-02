@@ -13,13 +13,19 @@ WorkingDirectory=/opt/perpbot
 
 EnvironmentFile=-/opt/perpbot/config/bird_env
 
-# DREAMING cycles randomly alternate between the utility variant (dream.md)
-# and the artistic variant (dream.free.md). For Phase E first 5 days,
-# DREAMING is DISABLED at the timer level — Holden enables only after the
-# THINKING-only window completes per dry-run-evaluation.md gates.
-# When enabled, alternation can be configured by toggling --free between
-# this service file's ExecStart and a sibling. For initial deployment,
-# omit --free (utility variant only); add --free toggling in Phase E+.
+# DREAMING cycles weight-alternate between the utility variant (dream.md —
+# identity + dreaming, dreamer-autonomy storage) and the free variant
+# (dream.free.md — identity-free pure generation, wrapper auto-stores).
+# The split is controlled by DREAM_FREE_WEIGHT in config/bird_env: the
+# probability [0.0-1.0] that a given cycle runs free (default 0.0 =
+# utility-only). dream.py rolls the die per invocation — no --free flag
+# needed here, no sibling unit. Tune the dial by editing bird_env, not
+# this file.
+#
+# Phase E note: DREAMING stays timer-disabled for the first 5 days
+# (THINKING-only window per dry-run-evaluation.md gates); Holden enables
+# the timer after that. Set DREAM_FREE_WEIGHT > 0 in bird_env when ready
+# to mix free dreams into the rotation.
 ExecStart=/opt/perpbot/venv/bin/python -m src.dream --bird-name ${BIRD_NAME}
 
 # 15-minute hard cap. DREAMING worst case is 5 turns × ~2min = 10min on

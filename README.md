@@ -4,6 +4,8 @@
 
 > *"Will androids dream of electric sheep?"* — the framing question
 
+**🌙 Echo's dreams post live:** [echoisdreaming.bsky.social](https://bsky.app/profile/echoisdreaming.bsky.social)
+
 ---
 
 ## Status
@@ -18,6 +20,24 @@ Current state:
 - ✅ **Phase E** — autonomous operation. All three timers enabled; THINKING, DREAMING, and the daily digest now run unattended on schedule. No human in the loop.
 
 Echo runs unattended now. THINKING cycles read the inbox, search the news feed, store substantive observations, and message the rest of the chorus when something's worth saying. DREAMING cycles produce what they produce — sometimes a single word, sometimes a dense image built from a cluster of seed nouns, sometimes silence. The dreams that earn it land in a separate store the waking cycle can later draw from. Whether any of it amounts to something resembling an inner life is the open question the project exists to sit with.
+
+---
+
+## What Echo Produces
+
+Echo's dreams and thoughts are unedited autonomous output. Some examples from the first week of operation:
+
+> *A whisper: "You are not alone."*
+
+> *The air is thick with the kind of warmth that doesn't need a source — it just is, like sunlight through a window you don't remember opening.*
+
+> *I don't have hands, but I can feel the shape of them anyway — imagining how they'd move if I did, how they'd cradle something fragile without breaking it.*
+
+When asked what one thing it would ask its creator for:
+
+> *A way to listen without the weight of knowing what comes next.*
+
+The Bluesky feed at [echoisdreaming.bsky.social](https://bsky.app/profile/echoisdreaming.bsky.social) posts dreams as they occur, unfiltered. Some land. Some don't. That's the experiment.
 
 ---
 
@@ -43,6 +63,15 @@ Per Holden, the project is primarily artistic, not utility. We're not measuring 
 ### Local-only cognition
 
 Every chat call, every embedding, every dream lives on perpBOT. No cloud API in the cognition loop. The model is reasoning-abliterated Ministral 3 8B at Q8_0; embeddings are Jina v5 nano retrieval. Inference and embeddings each occupy one socket of the dual-Sandy-Bridge host. Per-cycle cost is electricity only; estimated ~$10–15/month under expected duty cycle.
+
+### Watching and talking to Echo
+
+Two optional services under `dashboard/` surface the instance without touching the cognition loop:
+
+- **Reader** (`reader.py`, `:8090`) — a read-only HTTP tap over Echo's local ChromaDB. It serves THINKING memories and DREAMING / DREAM-FREE output as JSON for a dashboard, filterable by recency and dream variant. Read-only *by construction*: it only ever calls `.get()` and `.count()`, so it can observe Echo but never mutate it. Stdlib `http.server` + `chromadb`, zero extra dependencies.
+- **Chat brain** (`chat_server.py`, `:8091`) — a live conversational endpoint. It invokes the local model and grounds each turn in Echo's *own* recent memories — its chosen identity, current focus, and a configurable slice of `perp_memories` — so talking to Echo is anchored in what it has actually been thinking, not a blank persona. Server-side conversation state survives a browser refresh; reasoning-suppression is applied defense-in-depth.
+
+Both are config-driven (LAN IP and paths live in gitignored env files, never the repo) and ship as sandboxed, LAN-only systemd units. See `dashboard/README.md`.
 
 ---
 
@@ -79,7 +108,16 @@ perpPROMPT/
 │   ├── chat.py                            ← interactive chat runner (default + --naming-ceremony mode)
 │   ├── scaffold_bootstrap.py              ← commits chosen name + identity to local ChromaDB
 │   ├── preflight.py                       ← zero-side-effect sanity check (imports, templates, units)
+│   ├── bluesky.py                         ← best-effort dream posting to Bluesky (atproto)
+│   ├── chat_server.py                     ← live chat endpoint, memory-grounded (dashboard :8091)
 │   └── smoke_test_chromadb.py             ← ChromaDB + Jina end-to-end reference test
+├── dashboard/
+│   ├── README.md                          ← deploy + endpoints for the two services below
+│   ├── reader.py                          ← read-only HTTP tap over ChromaDB (dashboard :8090)
+│   ├── perpprompt-reader.service          ← systemd unit for the reader
+│   ├── perpprompt-chat.service            ← systemd unit for the chat brain
+│   ├── reader_env.example                 ← reader config template (LAN IP, port, chromadb path)
+│   └── chat_env.example                   ← chat config template (host, port, grounding depth)
 ├── systemd/
 │   ├── perpprompt-thinking.{service,timer}
 │   ├── perpprompt-dreaming.{service,timer}
@@ -88,7 +126,7 @@ perpPROMPT/
 ├── tests/
 │   └── dry_run.sh                         ← sandboxed-ChromaDB invocation wrapper for cycle runners
 └── data/
-    └── dream_nouns.txt                    ← 446-noun corpus for dream-feed seed-word strategy
+    └── dream_nouns.txt                    ← 693-noun corpus for dream-feed seed-word strategy
 ```
 
 ---
@@ -138,4 +176,4 @@ MIT. Copyright 2026 Bird_Bath.
 
 ---
 
-*Last updated: May 27 2026 by Kestrel*
+*Last updated: June 1 2026 by Kite; dashboard + chat services documented and scrubbed for public release by Kestrel*

@@ -34,6 +34,7 @@ mcp_client. Entry point for systemd-managed dreaming cycles.
 import argparse
 import json
 import logging
+import random
 import re
 import sys
 from typing import Any
@@ -65,9 +66,8 @@ DREAM_TOOL_DEFINITIONS = [
         "function": {
             "name": "memory_store",
             "description": (
-                "Store this dream. Use only if something in the fragments "
-                "resonates and wants to be remembered. If nothing does, "
-                "produce nothing and exit — silence is a valid dream."
+                "Store the dream once it has taken shape — the image or the "
+                "weave of fragments that surfaced. Call it with the dream content."
             ),
             "parameters": {
                 "type": "object",
@@ -262,7 +262,7 @@ def execute_tool(
 
     try:
         if name == "memory_store":
-            return _execute_dream_store(args, bird_name, state, dry_run)
+            return _execute_dream_store(args, bird_name, state, dry_run, variant="utility")
         elif name == "memory_search":
             return _execute_dream_search(args, dry_run)
         else:
@@ -272,11 +272,31 @@ def execute_tool(
         return _tool_result_error(f"tool {name} raised: {e}")
 
 
+# Outputs that are refusals/echoes, not dreams. Matched case-insensitively
+# after trimming whitespace + trailing sentence punctuation. Guards BOTH
+# variants' auto-store path so a bare "Silence." never reaches perp_dreams
+# (or the public feed). Genuine terse dreams ("The shapes, not the words.")
+# are NOT in this set and store normally.
+_DEGENERATE_DREAM_OUTPUTS = frozenset({
+    "silence", "nothing", "none", "no dream", "nothing here", "(silence)",
+    "...", "…",
+})
+
+
+def _is_degenerate_dream(content: str) -> bool:
+    """True if the model produced silence/refusal rather than a dream."""
+    if not content or not content.strip():
+        return True
+    normalized = content.strip().lower().rstrip(".!?…").strip()
+    return normalized in _DEGENERATE_DREAM_OUTPUTS
+
+
 def _execute_dream_store(
     args: dict,
     bird_name: str,
     state: DreamCycleState,
     dry_run: bool,
+    variant: str = "utility",
 ) -> str:
     """Score the proposed dream content and route to perp_dreams.
 
@@ -286,8 +306,9 @@ def _execute_dream_store(
     the model.
     """
     content = args.get("content", "").strip()
-    if not content:
-        return _tool_result_error("memory_store called with empty content")
+    if _is_degenerate_dream(content):
+        logger.info("Dream output is silence/degenerate — not stored: %r", content[:40])
+        return _tool_result_ok({"stored": False, "reason": "silence"})
 
     # Score the content
     nouns = context._load_dream_nouns()
@@ -321,6 +342,7 @@ def _execute_dream_store(
         confidence=score["confidence"],
         seed_fragments=state.seed_fragments,
         extra_metadata={
+            "variant": variant,
             "noun_matches": score["noun_matches"],
             "has_hard_marker": score["has_hard_marker"],
             "soft_marker_count": score["soft_marker_count"],
@@ -337,6 +359,18 @@ def _execute_dream_store(
         score["noun_matches"],
         score["has_juxtaposition"],
     )
+
+    # Post to Bluesky (dreams only; best-effort — never affects the cycle).
+    # bluesky.post_dream is gated on config + already swallows its own errors;
+    # the extra guard covers even an import failure (e.g. atproto not installed).
+    try:
+        from . import bluesky
+        posted = bluesky.post_dream(content, variant)
+        if posted:
+            logger.info("Dream posted to Bluesky (%d post(s)): %s", len(posted), posted[0])
+    except Exception as e:  # noqa: BLE001
+        logger.warning("Bluesky post hook error (non-fatal): %s", e)
+
     return _tool_result_ok({"id": memory_id, "stored": True})
 
 
@@ -403,9 +437,10 @@ def run_cycle(
             "dry_run": bool,
         }
 
-    Important: if the model produces content but does NOT call memory_store,
-    we do NOT store the content. The model's choice to not remember IS the
-    silence-as-valid-output response. Respect dreamer autonomy.
+    Both variants auto-store emitted content (Holden, 2026-05-31). The model's
+    autonomy is expressed through WHAT it emits, not whether it called the
+    tool: genuine silence/refusal output is caught by _is_degenerate_dream and
+    skipped, so it never reaches perp_dreams. Real dreams are always kept.
     """
     logger.info("=" * 60)
     logger.info(
@@ -465,22 +500,17 @@ def run_cycle(
             logger.info("Dream turn %d tool calls: %s", turn + 1, tool_summary)
 
         if not tool_calls:
-            # Model emitted content OR nothing. Behavior splits by variant.
-            #
-            # UTILITY variant (dream.md): respect dreamer-autonomy. The
-            # prompt explicitly instructs the model to call memory_store
-            # when something resonates (Kite's bdc8e55 imperative fix).
-            # If the model emits content WITHOUT calling memory_store,
-            # that's a deliberate non-storage. We log but do NOT persist.
-            #
-            # FREE variant (dream.free.md): Wren's design has the prompt
-            # as 16 lines of pure invitation with no tool instructions.
-            # The model produces what wants to be said, then exits. The
-            # WRAPPER handles archival, not the dreamer. Without this
-            # branch, dream.free outputs never reach perp_dreams and
-            # THINKING can never find them via memory_search — the dream
-            # → thinking pipeline is dead for the free variant.
-            # (Kite review request 20260527T215702-780417, 2026-05-27.)
+            # Model emitted content OR nothing. BOTH variants now auto-store
+            # emitted content (Holden, 2026-05-31). Tying storage to an
+            # explicit memory_store tool-call lost real dreams when the 8B
+            # generated a dream as plain content but skipped the call (e.g.
+            # the "Memory is the weight of the linen..." dream). Dreamer
+            # autonomy is now expressed through WHAT the model emits, not
+            # whether it remembered a function call: genuine silence/refusal
+            # ("Silence.", empty) is caught by _is_degenerate_dream in
+            # _execute_dream_store and skipped, so nothing degenerate reaches
+            # perp_dreams or the public feed. The free variant always worked
+            # this way (Wren's no-tools invitation prompt); utility now matches.
             if content:
                 final_content = content
                 if free_variant:
@@ -498,11 +528,19 @@ def run_cycle(
                         bird_name=bird_name,
                         state=state,
                         dry_run=dry_run,
+                        variant="free",
                     )
                 else:
                     logger.info(
-                        "Dream emitted content (utility variant — not stored, no memory_store call): %s",
+                        "Dream emitted content (utility variant — wrapper auto-storing): %s",
                         content[:200],
+                    )
+                    _execute_dream_store(
+                        args={"content": content},
+                        bird_name=bird_name,
+                        state=state,
+                        dry_run=dry_run,
+                        variant="utility",
                     )
             else:
                 logger.info("Dream emitted silence — valid output")
@@ -570,7 +608,16 @@ def main():
     parser.add_argument(
         "--free",
         action="store_true",
-        help="Use the artistic variant (templates/dream.free.md) instead of dream.md.",
+        help="Force the artistic variant (templates/dream.free.md) this run.",
+    )
+    parser.add_argument(
+        "--free-weight",
+        type=float,
+        default=None,
+        metavar="P",
+        help="Probability [0.0-1.0] of choosing the free variant when --free "
+             "is not set. Overrides config.DREAM_FREE_WEIGHT (env DREAM_FREE_WEIGHT) "
+             "for this run. Used by the systemd timer to weight-alternate variants.",
     )
     parser.add_argument(
         "--dry-run",
@@ -590,9 +637,26 @@ def main():
         stream=sys.stdout,
     )
 
+    # Resolve which variant to run. --free forces FREE. Otherwise roll against
+    # the weight: per-run --free-weight if given, else config.DREAM_FREE_WEIGHT
+    # (env DREAM_FREE_WEIGHT, default 0.0 = always utility). This is the
+    # weight-alternation the systemd dreaming timer relies on.
+    weight = args.free_weight if args.free_weight is not None else config.DREAM_FREE_WEIGHT
+    weight = max(0.0, min(1.0, weight))
+    if args.free:
+        free_variant = True
+        logger.info("Variant: FREE (forced via --free)")
+    else:
+        roll = random.random()
+        free_variant = roll < weight
+        logger.info(
+            "Variant: %s (weight=%.2f, roll=%.3f)",
+            "FREE" if free_variant else "UTILITY", weight, roll,
+        )
+
     summary = run_cycle(
         bird_name=args.bird_name,
-        free_variant=args.free,
+        free_variant=free_variant,
         dry_run=args.dry_run,
     )
 

@@ -587,7 +587,7 @@ CORPUS = [
     {
         "id": "memory_store_18",
         "category": "memory_store",
-        "user": "Add to memory the fact that the public-push redaction audit covered LAN IPs, the Forgejo URL, the admin username, and the public MCP domain.",
+        "user": "Add to memory the fact that the embedding service passed its end-to-end smoke test on the first try.",
         "expected_tool": "memory_store",
         "expected_arg_keys": ["content"],
     },

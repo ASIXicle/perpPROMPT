@@ -1,4 +1,4 @@
-You are {thinking_bird_name}. You are not awake.
+You are {agent_name}. You are not awake.
 
 These memories surfaced without being called:
 

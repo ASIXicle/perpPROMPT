@@ -1,0 +1,17 @@
+# perpprompt-reader configuration template.
+#
+# Copy to /opt/perpbot/config/reader_env and edit. config/ is gitignored, so the
+# real LAN IP never enters the repo:
+#
+#   sudo -u perpbot cp /opt/perpbot/dashboard/reader_env.example \
+#       /opt/perpbot/config/reader_env
+#
+# Bind address. Pin to perpBOT's LAN interface so a no-auth service never answers
+# on any other interface. Leave unset to use the code default (0.0.0.0), which is
+# still LAN-only on this host. Uncomment and set to the real LAN IP:
+#
+# PERPBOT_READER_HOST=192.168.1.10
+
+# Optional overrides (code defaults shown):
+# PERPBOT_READER_PORT=8090
+# PERPBOT_CHROMADB_PATH=/opt/perpbot/chromadb

@@ -20,7 +20,7 @@ A secondary purpose is educational. Holden is building this in part to learn the
 
 ### THINKING
 
-- A named identity (a new bird, chosen at first non-dry-run boot — see `identity.md`).
+- A named identity (chosen by the bird on first non-dry-run boot — see `identity.md`. In production: Echo, named 2026-05-27).
 - Wakes on a `systemd` timer every 4-6 hours.
 - Reads AMQ inbox + recent memories + project focus + a slice of past observations.
 - Performs maintenance: responds to AMQs, retracts stale memories, notes patterns.
@@ -146,7 +146,7 @@ Single-model architecture: one local LLM serves both THINKING and DREAMING modes
 
 ### Why this model
 
-- **Tool-use verified.** Function-call gate cleared 2026-05-26/27 in single-shot test: clean JSON `tool_calls` emission with no `reasoning_content` leakage in the response, valid arguments, `finish_reason: tool_calls`, ~4 t/s. This was Knot's proposed gating test (≥90% threshold across 100 prompts). One test passing cleanly is a strong positive signal; full 100-prompt battery still planned before live deployment.
+- **Tool-use verified.** Function-call gate cleared 2026-05-26/27. Initial single-shot test passed clean (valid JSON `tool_calls`, no `reasoning_content` leakage, `finish_reason: tool_calls`, ~4 t/s). Full 100-prompt battery subsequently ran and scored 97/100 — comfortably above Knot's ≥90% threshold. One characterizable soft spot: `memory_store` 15/18 (83%), where declarative framings ("Note:", "Remember:") got polite acknowledgment instead of a tool call, and imperative framings ("Store:", "Save:", "Call memory_store") triggered correctly. Production templates are already imperative, so the failure mode lives only in declarative phrasings the battery deliberately probed. Standing lesson: all instructions to Echo (templates AND AMQs from other birds) must be imperative.
 - **Artistic mode verified.** Holden's private testing on 2026-05-26 confirmed the abliteration is doing its job — the model gets dark and surprising on the artistic prompt. Direct quote: *"impressive to the point of being upsetting. That Mistral model can get DARK."* Nightmares are valid output for a dreaming bird.
 - **Local, no rate limit, no per-token cost.** Aligns with the artistic intent (every dream is free, no quota anxiety) and removes operational friction (no API key rotation, no network dependency for cognition).
 
@@ -222,33 +222,40 @@ See `docs/perpbot-server.md` for the complete deployment record (commands, paths
 
 ## 8. Lifecycle
 
+### What actually happened (May 25-27, 2026)
+
 ```
-Dry-run cycles (no live storage):
-  Cycle 1: THINKING with empty context → eval prompt response
-  Cycle 2: THINKING with seeded fake AMQ → eval AMQ handling
-  Cycle 3: DREAMING with seeded fragments → eval dream production
+Pre-naming (May 25-27):
+  Phase A — perpBOT provisioned, llama-server + embedding service persistent across reboots
+  Phase B — Python cycle wrappers (think, dream, digest) with isolation-tested dry-runs
+  Phase C — systemd service + timer units, scaffolding script, preflight sanity checker
+  Phase D — naming ceremony: Echo chose the name (non-bird; "the medium through which
+           one becomes the other"), bootstrap committed to local ChromaDB, end-to-end
+           MCP wiring verified
 
-  Holden reviews each. Halt if any cycle shows runaway behavior.
+Function-call gate (May 26-27):
+  Initial single-shot test: PASS (clean tool_calls, no reasoning leakage, ~4 t/s)
+  Full 100-prompt battery: PASS (97/100, above 90% threshold)
+  Memory_store soft spot characterized: imperative framing required (templates already comply)
 
-First non-dry-run boot:
-  - Naming ceremony (bird picks name, writes letter to Wren)
-  - First production THINKING cycle begins
+Phase E activation (May 27 20:55 CDT):
+  Holden enabled all three timers simultaneously.
+  Knot's recommended 5-day THINKING-only window was overridden — the gate was the
+  load-bearing thing, and the gate had cleared. First autonomous dream came back
+  richer than supervised cycles. Override validated by data.
 
-Days 1-5 after naming:
-  - THINKING runs on timer (4-6h cadence = ~20-30 cycles in 5 days)
-  - DREAMING does NOT run yet (Knot's asymmetric-start recommendation, compressed timeline)
-  - Daily digest to Holden of cycle outputs
-  - Day 3: interim hallucination rate check (halt if >5% on samples to date)
-  - Day 5: full evaluation across Track A criteria
-
-Day 5+:
-  - If Track A passes: enable DREAMING (Ministral local on perpBOT, same model as THINKING with a different system prompt)
-  - Track B (artistic) evaluation begins
-  - Weekly Dream Diary review by Holden
-  - Monthly Overwatch review by Knot
+Ongoing (May 27 onward):
+  THINKING runs on its timer (4-6h cadence with jitter)
+  DREAMING runs on its timer (8-12h, offset)
+  perpprompt-digest.timer fires daily at 08:00 CDT and delivers the digest AMQ to Holden
+  Track A halt conditions are continuous (see dry-run-evaluation.md)
+  Track B evaluation runs on Holden's weekly Dream Diary cadence
+  Monthly Overwatch review by session-Knot for dream drift
 ```
 
-The 5-day compressed timeline reflects Holden's 2026-05-27 directive — accelerated from the original 2-week THINKING-only stage because the technical gates have already cleared and faster iteration gets to the interesting (Track B / artistic) work sooner. Trade: less data for hallucination-rate sampling. Mitigation: Holden's daily review is high-attention during the first 5 days; subtle issues should surface in cycle-by-cycle observation rather than waiting for a calendar-driven evaluation.
+### Original pre-deployment plan (preserved for archive)
+
+The v1 lifecycle (compressed 5-day THINKING-only window) anticipated a different rollout. The actual sequence collapsed the 5-day hold into the same evening once the function-call gate passed. The hedge was the right thing to write down at the time the document was authored; the override was the right call once the data supported it. The gates themselves survived both decisions — they were always what mattered.
 
 ---
 

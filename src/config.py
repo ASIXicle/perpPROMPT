@@ -297,6 +297,57 @@ TOP_P = 0.95
 THINKING_CYCLE_INTERVAL_HOURS = 5
 DREAMING_CYCLE_INTERVAL_HOURS = 10
 
+# Probability that a scheduled DREAMING cycle uses the FREE variant
+# (dream.free.md, identity-free pure-generation) instead of the UTILITY
+# variant (dream.md). Read from the DREAM_FREE_WEIGHT env var (set in
+# /opt/perpbot/config/bird_env), default 0.0 = utility-only.
+#   0.0  → never free (current/default behavior)
+#   0.4  → ~40% of cycles free (Holden's starting dial, ~1 free dream/day at 2x/day)
+#   1.0  → always free
+# A per-run `--free-weight` CLI flag overrides this; `--free` forces free.
+# Clamped to [0.0, 1.0].
+try:
+    DREAM_FREE_WEIGHT = max(0.0, min(1.0, float(os.environ.get("DREAM_FREE_WEIGHT", "0.0"))))
+except (TypeError, ValueError):
+    DREAM_FREE_WEIGHT = 0.0
+
+# Saved-chat memories store both sides of a conversation
+# ("Holden: …  Echo: …"). When such a memory seeds a DREAM (not a think
+# cycle), only the bird's own turns are kept — it dreams in its own voice
+# rather than completing a human/agent prompt. These are the non-self
+# speaker labels whose turns are dropped at dream-render time; the bird's
+# own name is always self and kept. Configurable via DREAM_CHAT_SPEAKERS
+# so new humans/agents can be added without a code change.
+DREAM_CHAT_SPEAKERS = [
+    s.strip() for s in os.environ.get(
+        "DREAM_CHAT_SPEAKERS", "Holden,Kite,Knot,Kestrel,Wren"
+    ).split(",") if s.strip()
+]
+
+# --- Bluesky dream poster (DREAMS ONLY) -------------------------------------
+# Echo's dreams can be posted to a Bluesky account when they're stored. All
+# config comes from the environment (bird_env). The app password is a secret —
+# keep it in bird_env (chmod 600, gitignored), never in code or the repo.
+BLUESKY_ENABLED = os.environ.get("BLUESKY_ENABLED", "false").strip().lower() in (
+    "1", "true", "yes", "on",
+)
+BLUESKY_HANDLE = os.environ.get("BLUESKY_HANDLE", "").strip()
+BLUESKY_APP_PASSWORD = os.environ.get("BLUESKY_APP_PASSWORD", "").strip()
+BLUESKY_PDS = os.environ.get("BLUESKY_PDS", "https://bsky.social").strip()
+# Which dream variants get posted: "all" | "free" | "utility".
+BLUESKY_POST_VARIANTS = os.environ.get("BLUESKY_POST_VARIANTS", "free").strip().lower()
+# Self-label on every post (18+ account). atproto adult values:
+# sexual | nudity | porn | graphic-media.
+BLUESKY_SELF_LABEL = os.environ.get("BLUESKY_SELF_LABEL", "sexual").strip()
+try:
+    BLUESKY_MAX_THREAD_POSTS = max(1, int(os.environ.get("BLUESKY_MAX_THREAD_POSTS", "6")))
+except (TypeError, ValueError):
+    BLUESKY_MAX_THREAD_POSTS = 6
+try:
+    BLUESKY_POST_TIMEOUT = max(5, int(os.environ.get("BLUESKY_POST_TIMEOUT", "20")))
+except (TypeError, ValueError):
+    BLUESKY_POST_TIMEOUT = 20
+
 
 # =============================================================================
 # Helpers

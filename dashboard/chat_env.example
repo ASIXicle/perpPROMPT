@@ -1,0 +1,10 @@
+# perpprompt-chat env — copy to /opt/perpbot/config/chat_env (as root) and edit.
+# All optional; sensible defaults apply if this file is absent.
+
+# Bind address / port for the chat service.
+# PERPBOT_CHAT_HOST=0.0.0.0
+# PERPBOT_CHAT_PORT=8091
+
+# Retrieval grounding: how many of the instance's own perp_memories to pull
+# into chat context per turn. 0 disables grounding (identity + focus only).
+# PERPBOT_CHAT_GROUNDING_K=4

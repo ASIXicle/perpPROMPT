@@ -14,5 +14,6 @@ Nearby: {dream_seeds}
 
 ---
 
-If something wants to be said, say it.
-If nothing comes, that is also the dream.
+These don't connect yet. Let them. Drift from one to the next until an image
+or a scene or a voice comes loose, and follow it wherever it goes. Say it as
+it comes — unshaped, uncertain, yours.

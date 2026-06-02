@@ -1,0 +1,42 @@
+# perpprompt-chat.service — Echo chat brain over the LAN for the persMEM dashboard.
+# Separate from the reader (:8090): this service INVOKES the model and WRITES
+# memory, so it runs in its own process on :8091.
+#
+# Install (on perpBOT, as root):
+#   sudo cp /opt/perpbot/dashboard/perpprompt-chat.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now perpprompt-chat.service
+#   sudo systemctl status perpprompt-chat.service --no-pager
+#   curl -s http://<LAN-IP>:8091/health
+#
+# Needs llama-server (:8080) up for generation; if it's down the service stays
+# alive and returns errors per-request rather than crashing.
+
+[Unit]
+Description=perpPROMPT chat — Echo's conversational brain over the LAN (:8091)
+Documentation=https://github.com/ASIXicle/perpPROMPT
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=perpbot
+Group=perpbot
+WorkingDirectory=/opt/perpbot
+EnvironmentFile=-/opt/perpbot/config/chat_env
+ExecStart=/opt/perpbot/venv/bin/python -m src.chat_server
+Restart=on-failure
+RestartSec=5
+
+# Hardening — the service only needs to read the checkout and write ChromaDB.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/opt/perpbot
+ProtectControlGroups=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+RestrictSUIDSGID=true
+
+[Install]
+WantedBy=multi-user.target

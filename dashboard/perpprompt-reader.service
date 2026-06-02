@@ -1,0 +1,42 @@
+[Unit]
+Description=perpPROMPT reader — read-only LAN tap over Echo's ChromaDB for the persMEM dashboard
+Documentation=https://github.com/ASIXicle/perpPROMPT
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=perpbot
+Group=perpbot
+WorkingDirectory=/opt/perpbot
+
+# Config (the LAN IP especially) lives here, not in the repo — config/ is
+# gitignored. Copy dashboard/reader_env.example to /opt/perpbot/config/reader_env
+# and set the LAN IP. The leading dash makes it optional so the unit validates
+# before the file exists; without it the reader binds 0.0.0.0:8090, which is
+# still LAN-only on perpBOT.
+EnvironmentFile=-/opt/perpbot/config/reader_env
+
+ExecStart=/opt/perpbot/venv/bin/python /opt/perpbot/dashboard/reader.py
+
+# Long-running service: restart if it dies, but back off so a hard failure
+# (e.g. chromadb path missing) doesn't spin.
+Restart=on-failure
+RestartSec=10
+
+StandardOutput=journal
+StandardError=journal
+
+# Hardening, same shape as the cycle services. The reader only ever reads
+# application data, but chromadb/SQLite needs to write somewhere under the home
+# dir (WAL -wal/-shm bookkeeping, and chromadb's lazy default-embedding-function
+# cache), so the writable surface matches the siblings rather than risk a
+# sandbox denial. ProtectSystem=strict keeps the rest of the filesystem read-only.
+# Note: no Requires=llama-server here — the reader is independent of the model.
+ProtectSystem=strict
+ReadWritePaths=/opt/perpbot
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

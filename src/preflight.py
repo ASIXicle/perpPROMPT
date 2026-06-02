@@ -100,7 +100,7 @@ def _stub_context_think() -> dict:
 def _stub_context_dream() -> dict:
     """Stub values matching build_dream_context's return shape (minus side-channels)."""
     return {
-        "thinking_bird_name": "testbird",
+        "agent_name": "testbird",
         "ancient_memory": "(stub ancient)",
         "recent_memory": "(stub recent)",
         "random_memory": "(stub random)",
@@ -110,7 +110,7 @@ def _stub_context_dream() -> dict:
 
 
 def _stub_context_dream_free() -> dict:
-    """Stub values matching build_dream_free_context (no thinking_bird_name slot)."""
+    """Stub values matching build_dream_free_context (no agent_name slot)."""
     return {
         "ancient_memory": "(stub ancient)",
         "recent_memory": "(stub recent)",

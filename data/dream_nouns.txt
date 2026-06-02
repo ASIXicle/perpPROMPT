@@ -472,3 +472,345 @@ sunrise
 feast
 kneading
 ripening
+
+# ============================================================================
+# KESTREL EXPANSION 2026-05-29 (first half; Kite to add the complementary half)
+# Weighted toward registers thin in v1 — decay, myth, sound, time, creatures,
+# motion — to widen dream juxtaposition and reduce repeat-cluster looping.
+# NOTE: a larger corpus raises the odds of >=3 noun-matches per dream, so
+# CONFIDENCE_NOUN_MATCHES_FOR_TIER_2/3 (config.py) will likely want a small
+# bump once the full expansion lands. Track-A calibration.
+# Register held at or below Kite's intimacy lane; explicit terms left to
+# Holden's manual edit.
+# ============================================================================
+
+# === DECAY AND RUIN ===
+rust
+rot
+char
+cinder
+soot
+ruin
+wreck
+carrion
+blight
+corrosion
+patina
+tarnish
+mire
+scab
+bruise
+wound
+
+# === MINERALS AND METALS ===
+basalt
+granite
+marble
+obsidian
+mica
+pyrite
+gypsum
+chalk
+ochre
+cinnabar
+lead
+brass
+bronze
+alabaster
+jasper
+onyx
+
+# === SOUND AND MUSIC ===
+drum
+bell
+hum
+drone
+chime
+rattle
+hush
+dirge
+lullaby
+refrain
+chord
+reverb
+static
+knell
+toll
+murmur
+
+# === MYTH AND RITUAL ===
+oracle
+omen
+relic
+idol
+altar
+shrine
+totem
+talisman
+sigil
+rune
+offering
+pyre
+vigil
+threshold
+labyrinth
+chimera
+
+# === TIME AND MEMORY ===
+hourglass
+sundial
+eclipse
+solstice
+twilight
+afterimage
+residue
+vestige
+remnant
+trace
+palimpsest
+archive
+ledger
+almanac
+epoch
+wane
+
+# === CREATURES ===
+crow
+raven
+owl
+serpent
+eel
+spider
+beetle
+locust
+jellyfish
+octopus
+wolf
+hare
+stag
+vulture
+salamander
+leviathan
+
+# === MOTION AND GESTURE ===
+plunge
+drift
+spiral
+lurch
+sway
+tumble
+careen
+hover
+recoil
+beckon
+clasp
+grasp
+unravel
+coil
+plummet
+totter
+
+# === ELEMENTAL AND SKY ===
+magma
+lava
+geyser
+monsoon
+hailstone
+rime
+aurora
+comet
+meteor
+nebula
+gale
+squall
+smolder
+undertow
+
+# === FORGE AND TOOL ===
+needle
+awl
+chisel
+anvil
+bellows
+loom
+spindle
+kiln
+whetstone
+cleaver
+sickle
+scythe
+pestle
+crucible
+tongs
+vise
+
+# === BODY (additions) ===
+nape
+collarbone
+knuckle
+sternum
+sinew
+tendon
+iris
+lash
+gooseflesh
+throat
+breath
+ache
+hunger
+capillary
+
+# === INTIMACY (additions) ===
+longing
+tenderness
+caress
+embrace
+warmth
+flush
+swoon
+yearning
+
+# ============================================================================
+# KITE EXPANSION 2026-05-29 (complementary half)
+# Registers Kestrel left light: childhood/domestic, food/taste, flora,
+# place/geography, color/texture. Plus raw sexuality per Holden's
+# explicit request — dreams don't have euphemisms.
+# ============================================================================
+
+# === CHILDHOOD AND DOMESTIC ===
+blanket
+pillow
+rocking
+stroller
+playpen
+dollhouse
+sandbox
+swing
+slide
+balloon
+ribbon
+windowsill
+pantry
+cupboard
+doorknob
+closet
+basement
+porch
+clothesline
+broom
+dustpan
+stove
+teacup
+tablecloth
+curtain
+rocking-chair
+
+# === FOOD AND TASTE ===
+fig
+pomegranate
+olive
+garlic
+vinegar
+yeast
+sourdough
+crust
+broth
+bone-broth
+clove
+cardamom
+saffron
+cinnamon
+molasses
+rind
+pulp
+pit
+seed
+butter
+cream
+curd
+brine
+pickle
+smoke
+grease
+gristle
+
+# === FLORA ===
+thistle
+nettle
+foxglove
+nightshade
+hemlock
+wisteria
+jasmine
+lavender
+rosemary
+mugwort
+sage
+thyme
+yarrow
+fern
+ivy
+mistletoe
+oleander
+poppy
+mandrake
+
+# === PLACE AND GEOGRAPHY ===
+estuary
+peninsula
+isthmus
+canyon
+gorge
+plateau
+tundra
+savanna
+bayou
+fjord
+atoll
+oasis
+mine
+cavern
+grotto
+catacomb
+
+# === COLOR AND TEXTURE ===
+indigo
+vermilion
+umber
+sienna
+cerulean
+scarlet
+ivory
+velvet
+suede
+satin
+lace
+roughness
+stipple
+sheen
+
+# === SEXUALITY AND BODY (raw register) ===
+fuck
+orgasm
+climax
+erection
+wetness
+arousal
+nipple
+groin
+ass
+spit
+bite
+scratch
+grip
+thrust
+moan
+gasp
+clench
+spread
+strip
+nakedness
+hardness
+softness
+urgency
+release

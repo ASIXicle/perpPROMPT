@@ -31,6 +31,7 @@ external (chromadb). Imported by: think, dream, digest.
 
 import logging
 import random
+import re
 import secrets
 from datetime import datetime, timezone
 from pathlib import Path
@@ -86,7 +87,20 @@ class JinaDocumentEmbeddingFunction(EmbeddingFunction):
         pass
 
     def __call__(self, input: Documents) -> Embeddings:
-        return llama_client.embed_documents(list(input))
+        docs = list(input)
+        try:
+            return llama_client.embed_documents(docs)
+        except Exception as e:
+            # The embedding server rejects inputs longer than its context
+            # window, which otherwise crashes collection.add() and every save
+            # that depends on it (e.g. a long chat thread persisted via
+            # chat_server._persist). Retry with truncated copies: ChromaDB
+            # still stores the FULL document, so nothing is lost from the
+            # retrievable text — only the vector is computed from the opening
+            # ~380 tokens, which is enough to fix the item's semantic topic.
+            # 1500 chars is safe even for a 512-token embedding context.
+            logger.warning("embed_documents failed (%s); retrying truncated", e)
+            return llama_client.embed_documents([d[:1500] for d in docs])
 
 
 # =============================================================================
@@ -708,14 +722,18 @@ def build_dream_context(bird_name: str) -> dict:
     nouns_by_cat = _load_dream_nouns_by_category()
     dream_seeds_str, dream_seeds_list = _build_dream_seed_cluster(nouns_by_cat)
 
-    ancient = get_random_memory("perp_memories", age_cutoff_days=14)
-    recent = _get_most_recent_memory("perp_memories")
-    randmem = get_random_memory("perp_memories")
+    # Memory fragments. For dreams, saved-chat memories are reduced to the
+    # bird's OWN turns (drop human/other-agent turns) so the bird dreams in
+    # its own voice instead of completing a prompt. _dreamify_memory leaves
+    # plain observations untouched. Storage + the think path keep full chats.
+    ancient = _dreamify_memory(get_random_memory("perp_memories", age_cutoff_days=14), bird_name)
+    recent = _dreamify_memory(_get_most_recent_memory("perp_memories"), bird_name)
+    randmem = _dreamify_memory(get_random_memory("perp_memories"), bird_name)
     news_item_text = get_dream_news_fragment(seed_noun)
     amq_fragment = get_random_amq_fragment(bird_name)
 
     return {
-        "thinking_bird_name": bird_name,
+        "agent_name": bird_name,
         "ancient_memory": _format_single_memory(ancient, fallback="(an old silence)"),
         "recent_memory": _format_single_memory(recent, fallback="(today held nothing notable)"),
         "random_memory": _format_single_memory(randmem, fallback="(nothing surfaced)"),
@@ -737,12 +755,12 @@ def build_dream_free_context(bird_name: str) -> dict:
     """Assemble slot values for templates/dream.free.md (artistic variant).
 
     Same fragments as dream.md but without the identity slot. dream.free.md
-    omits {thinking_bird_name} per Kite's asymmetric-identity design.
+    omits {agent_name} per Kite's asymmetric-identity design.
     """
     full = build_dream_context(bird_name)
-    # dream.free.md template has no {thinking_bird_name}; remove from dict
+    # dream.free.md template has no {agent_name}; remove from dict
     # to avoid format() KeyError leak. The other slots are identical.
-    full.pop("thinking_bird_name", None)
+    full.pop("agent_name", None)
     return full
 
 
@@ -775,6 +793,67 @@ def _format_single_memory(memory: dict | None, fallback: str = "(nothing)") -> s
     if memory is None:
         return fallback
     return memory["content"]
+
+
+def _chat_speaker_re(self_name: str) -> re.Pattern:
+    """Build a turn-boundary matcher from the KNOWN speaker set.
+
+    Matching only known names (config.DREAM_CHAT_SPEAKERS + the bird's own
+    name) means colons inside the bird's own prose ("Note: …") are never
+    mistaken for a speaker label, so the bird's text is never chopped.
+    """
+    names = [self_name] + [
+        n for n in config.DREAM_CHAT_SPEAKERS if n.lower() != self_name.lower()
+    ]
+    alt = "|".join(re.escape(n) for n in names if n)
+    return re.compile(r"(?:^|\s)(" + alt + r"):\s", re.IGNORECASE)
+
+
+def strip_to_self_turns(content: str, self_name: str) -> str:
+    """DREAM-ONLY: from a saved-chat memory, keep only the bird's own turns.
+
+    Saved chats are stored whole ("[Chat conversation …] Holden: … Echo: …")
+    so THINKING and audit keep full context. But when such a memory seeds a
+    DREAM, the human/other-agent turns carry instruction grammar the dreamer
+    obeys instead of drifting from (the "Describe it." → dutiful-completion
+    failure). So for dreams we drop every non-self turn and the chat header,
+    leaving the bird's own words — it dreams in its own voice. Only the
+    "[Chat conversation" format is touched; plain observations pass through.
+
+    Returns the concatenated self-turns, or "" if the chat held none.
+    """
+    if not content or "[Chat conversation" not in content:
+        return content
+    matches = list(_chat_speaker_re(self_name).finditer(content))
+    if not matches:
+        return content
+    kept = []
+    for i, m in enumerate(matches):
+        seg_start = m.end()
+        seg_end = matches[i + 1].start() if i + 1 < len(matches) else len(content)
+        if m.group(1).lower() == self_name.lower():
+            kept.append(content[seg_start:seg_end].strip())
+    return " ".join(s for s in kept if s).strip()
+
+
+def _dreamify_memory(memory: dict | None, self_name: str) -> dict | None:
+    """Apply strip_to_self_turns to a memory's content for dream seeding.
+
+    Returns None when a chat memory strips to nothing (no self-turns) so the
+    slot falls back gracefully instead of seeding an empty fragment. Non-chat
+    memories and memories with self-turns are returned (content rewritten).
+    """
+    if not memory:
+        return memory
+    content = memory.get("content", "")
+    stripped = strip_to_self_turns(content, self_name)
+    if stripped == content:
+        return memory          # not a chat, or nothing changed
+    if not stripped:
+        return None            # chat had no self-turns → fall back
+    out = dict(memory)
+    out["content"] = stripped
+    return out
 
 
 def _get_most_recent_memory(collection_name: str) -> dict | None:
