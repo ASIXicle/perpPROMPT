@@ -51,6 +51,8 @@ the repo. The systemd units are LAN-only and sandboxed (`ProtectSystem=strict`,
 | GET | `/perp_dreams?limit=N&since=ISO&variant=utility\|free\|all` | DREAMING / DREAM-FREE |
 
 Dreams without a `variant` key bucket as `utility` (reader-side backward-compat).
+The `free` filter also includes `conversation`-variant dreams (a sub-variant of
+free that seeds from recent chat fragments rather than dream-nouns).
 Config via `PERPBOT_READER_HOST` / `PERPBOT_READER_PORT` / `PERPBOT_CHROMADB_PATH`;
 chat via `PERPBOT_CHAT_HOST` / `PERPBOT_CHAT_PORT` / `PERPBOT_CHAT_GROUNDING_K`.
 See the `*_env.example` files for the full set.

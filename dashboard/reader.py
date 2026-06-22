@@ -162,9 +162,15 @@ def dreams_payload(qs):
     variant = (_qs_str(qs, "variant", "all") or "all").lower()
     rows = _fetch(DREAMS)
     if variant in ("utility", "free"):
+        # "conversation" is a sub-variant of "free" (Jun 15 2026, Kite).
+        # When filtering for "free", include conversation-variant dreams too.
+        if variant == "free":
+            accepted = {"free", "conversation"}
+        else:
+            accepted = {variant}
         rows = [
             r for r in rows
-            if r["metadata"].get("variant", DEFAULT_VARIANT) == variant
+            if r["metadata"].get("variant", DEFAULT_VARIANT) in accepted
         ]
     rows = _apply_filters(
         rows,

@@ -290,6 +290,10 @@ def _execute_memory_store(args: dict, bird_name: str, state: CycleState, dry_run
         bird_name=bird_name,
         derived_from=derived_from,
     )
+    # Dedup check returns "dedup:<existing_id>" instead of storing
+    if memory_id.startswith("dedup:"):
+        logger.info("THINKING observation was near-duplicate, not stored: %s", content[:80])
+        return _tool_result_ok({"id": memory_id, "stored": False, "reason": "near_duplicate"})
     state.store_count += 1
     state.stored_memory_ids.append(memory_id)
     return _tool_result_ok({"id": memory_id, "stored": True})

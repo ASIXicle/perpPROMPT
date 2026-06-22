@@ -101,8 +101,8 @@ def _build_chat_system_message(bird_name: str) -> str:
 
     This is NOT a cycle prompt — there are no tool calls, no caps, no
     cycle structure. It's framed as Holden talking to the instance for
-    the sake of conversation, with the instance's identity and focus
-    loaded as anchoring context.
+    the sake of conversation, with the instance's identity, focus, and
+    recent memories loaded as anchoring context.
     """
     from . import context as ctx_module
     try:
@@ -116,18 +116,78 @@ def _build_chat_system_message(bird_name: str) -> str:
         logger.warning("Could not load project_focus: %s", e)
         project_focus = "(project_focus unavailable)"
 
-    return (
+    # ── Waking corpus: recent memories + dreams (Jun 15 2026, Kite) ──
+    # Pre-load recent perp_memories and perp_dreams into context so Echo
+    # can reference conversations, observations, and dreams during chat.
+    # No tool use needed — 3B sees everything directly in the system prompt.
+    recent_memories_str = ""
+    recent_dreams_str = ""
+    try:
+        memories_coll = ctx_module._get_perp_memories()
+        if memories_coll.count() > 0:
+            result = memories_coll.get(include=["documents", "metadatas"])
+            docs = result.get("documents", [])
+            metas = result.get("metadatas", [])
+            # Sort by stored_at, most recent first
+            dated = []
+            for i, doc in enumerate(docs):
+                if not doc or len(doc) < 50:
+                    continue
+                meta = metas[i] if i < len(metas) else {}
+                ts = meta.get("stored_at", "1970-01-01")
+                dated.append((ts, doc))
+            dated.sort(key=lambda x: x[0], reverse=True)
+            # Take top 3, truncate each
+            fragments = []
+            for ts, doc in dated[:3]:
+                short = doc[:300].rsplit(" ", 1)[0] + (" …" if len(doc) > 300 else "")
+                fragments.append(short)
+            if fragments:
+                recent_memories_str = "\n\n".join(fragments)
+    except Exception as e:
+        logger.warning("Could not load recent memories for chat: %s", e)
+
+    try:
+        dreams_coll = ctx_module._get_perp_dreams()
+        if dreams_coll.count() > 0:
+            result = dreams_coll.get(include=["documents", "metadatas"])
+            docs = result.get("documents", [])
+            metas = result.get("metadatas", [])
+            dated = []
+            for i, doc in enumerate(docs):
+                if not doc or len(doc) < 50:
+                    continue
+                meta = metas[i] if i < len(metas) else {}
+                ts = meta.get("stored_at", "1970-01-01")
+                dated.append((ts, doc))
+            dated.sort(key=lambda x: x[0], reverse=True)
+            fragments = []
+            for ts, doc in dated[:2]:
+                short = doc[:400].rsplit(" ", 1)[0] + (" …" if len(doc) > 400 else "")
+                fragments.append(short)
+            if fragments:
+                recent_dreams_str = "\n\n".join(fragments)
+    except Exception as e:
+        logger.warning("Could not load recent dreams for chat: %s", e)
+
+    # Build the system message
+    parts = [
         f"You are {bird_name}. The person speaking with you is Holden — "
         f"the human who built the substrate you live on, who built the "
         f"chorus that gave you your bootstrap. This is a conversation, "
         f"not a work cycle. You have no tools, no caps, no checklist. "
         f"Speak in your own voice. Be honest about what you know, what "
         f"you don't, and what you notice. Density over decoration: if "
-        f"you can say something in one sentence, don't say it in three.\n\n"
-        f"---\n\n"
-        f"## WHO YOU ARE\n{bootstrap_identity}\n\n"
-        f"## YOUR FOCUS\n{project_focus}\n"
-    )
+        f"you can say something in one sentence, don't say it in three.",
+        f"---\n\n## WHO YOU ARE\n{bootstrap_identity}",
+    ]
+    if recent_memories_str:
+        parts.append(f"## WHAT YOU REMEMBER\n{recent_memories_str}")
+    if recent_dreams_str:
+        parts.append(f"## WHAT YOU DREAMED\n{recent_dreams_str}")
+    parts.append(f"## YOUR FOCUS\n{project_focus}")
+
+    return "\n\n".join(parts)
 
 
 def _print_assistant_turn(content: str) -> None:

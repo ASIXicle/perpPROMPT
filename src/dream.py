@@ -280,15 +280,86 @@ def execute_tool(
 _DEGENERATE_DREAM_OUTPUTS = frozenset({
     "silence", "nothing", "none", "no dream", "nothing here", "(silence)",
     "...", "…",
+    # Jun 15 2026: Holden — c1 single-word/phrase tokens that escape the old set
+    "drift", "echo", "matchbox", "no response", "i am echo", "i am an echo",
+    "the dream is yours", "no response generated yet",
+})
+
+# Silence-class paraphrases the 8B reaches for when it won't dream but won't
+# emit a bare "Silence." either. Matched as the WHOLE normalized output only
+# (not substring) so a genuine dream that contains one of these words is safe.
+_SILENCE_PHRASES = frozenset({
+    "silence is the dream", "the dream is silence",
+    "i am silent", "i do not speak",
+    "i am silent the fragments resonate but i do not speak",
+    "i have nothing to say", "no dream tonight",
+    "i dont have a mood to report only the quiet of presence",
+})
+
+# Prompt-template instruction text that must never reach perp_dreams or the
+# public feed. The utility variant historically regurgitated these verbatim
+# ("No task. No obligation." — Kite's leak finding, 2026-06-02): a template
+# echo, not a dream. Normalized form (lowercased, punctuation stripped,
+# whitespace collapsed). Sources: dream.md / dream.free.md / standing_directives.
+_TEMPLATE_ECHO_FRAGMENTS = frozenset({
+    "no task no checklist no obligation", "no task no obligation",
+    "no task no checklist", "no checklist no obligation",
+    "what do these fragments say to each other",
+    "if something resonates call memory store with what wants to be kept",
+    "if nothing does produce nothing silence is valid",
+    "produce nothing silence is valid", "silence is valid",
+    "these fragments dont connect yet let them",
+    "these dont connect yet let them",
+    "say it as it comes unshaped uncertain yours",
+    "you are not awake", "you are you are not awake",
+    # think.md instruction language (Kite, 2026-06-02) — leaks via the
+    # memory→fragment pipeline; the last two appeared verbatim in c1 output.
+    "do not describe what you plan to do",
+    "execute the tool calls directly",
+    "your output is tool calls and observations",
+    "i will carry the work by asking questions first",
+    "storing only what i cannot yet explain",
 })
 
 
+def _normalize_for_echo(content: str) -> str:
+    """Lowercase, strip all punctuation, collapse whitespace, for echo match."""
+    text = re.sub(r"[^\w\s]", " ", content.lower())
+    return re.sub(r"\s+", " ", text).strip()
+
+
 def _is_degenerate_dream(content: str) -> bool:
-    """True if the model produced silence/refusal rather than a dream."""
+    """True if the output is silence/refusal/template-echo, not a dream.
+
+    Three classes, all of which would otherwise reach perp_dreams AND the
+    public feed (the Bluesky post hook fires downstream of this guard):
+      1. empty / bare-silence tokens ("silence", "...", "(silence)")
+      2. silence-class paraphrases ("I am silent...") — whole-output match
+      3. prompt-template regurgitation ("No task. No obligation.") — the
+         utility-variant leak Kite flagged 2026-06-02
+    Genuine terse dreams ("The shapes, not the words.") are NOT caught: the
+    silence/echo sets are matched against the whole normalized output, and the
+    template-fragment substring check is length-gated so a real dream that
+    merely contains a phrase isn't nuked.
+    """
     if not content or not content.strip():
         return True
     normalized = content.strip().lower().rstrip(".!?…").strip()
-    return normalized in _DEGENERATE_DREAM_OUTPUTS
+    if normalized in _DEGENERATE_DREAM_OUTPUTS:
+        return True
+    echo_norm = _normalize_for_echo(content)
+    if not echo_norm:
+        return True
+    if echo_norm in _SILENCE_PHRASES or echo_norm in _TEMPLATE_ECHO_FRAGMENTS:
+        return True
+    # A short output dominated by a template fragment is an echo, not a dream.
+    # Length-gated (<=120 normalized chars) so a long genuine dream that
+    # happens to contain a phrase passes untouched.
+    if len(echo_norm) <= 120:
+        for frag in _TEMPLATE_ECHO_FRAGMENTS:
+            if frag in echo_norm:
+                return True
+    return False
 
 
 def _execute_dream_store(
@@ -314,6 +385,17 @@ def _execute_dream_store(
     nouns = context._load_dream_nouns()
     score = score_dream(content, nouns)
     state.scores.append(score)
+
+    # ── c1 free-variant gate (Holden, Jun 15 2026) ──
+    # c1 DREAM-FREE is repetitive nonsense ("Drift.", "Echo.", "Matchbox").
+    # c2 and c3 are where the real art lives. Drop c1 free dreams silently.
+    if variant == "free" and score["confidence"] < config.DREAM_FREE_MIN_CONFIDENCE:
+        logger.info(
+            "Free dream below min confidence (%d < %d), not stored: %s",
+            score["confidence"], config.DREAM_FREE_MIN_CONFIDENCE,
+            content[:60],
+        )
+        return _tool_result_ok({"stored": False, "reason": "below_min_confidence"})
 
     # Tier 0 means empty — but we already filtered empty above, so this
     # shouldn't happen here. Defensive log if it does.
@@ -413,6 +495,7 @@ def _tool_result_error(message: str) -> str:
 def run_cycle(
     bird_name: str,
     free_variant: bool = False,
+    conversation_variant: bool = False,
     dry_run: bool = False,
 ) -> dict:
     """Execute one DREAMING cycle for the named bird.
@@ -421,6 +504,9 @@ def run_cycle(
         bird_name: The bird's chosen name.
         free_variant: If True, use templates/dream.free.md (artistic);
                       otherwise use templates/dream.md (utility).
+        conversation_variant: If True (and free_variant=True), use
+                      templates/dream.conversation.md as the primary
+                      template, seeded from Holden's recent conversations.
         dry_run: If True, log proposed stores but don't actually write.
 
     Returns a summary dict:
@@ -443,23 +529,31 @@ def run_cycle(
     skipped, so it never reaches perp_dreams. Real dreams are always kept.
     """
     logger.info("=" * 60)
+    variant_label = "conversation" if (conversation_variant and free_variant) else ("free" if free_variant else "utility")
     logger.info(
         "DREAMING cycle starting for %s (variant=%s, dry_run=%s)",
         bird_name,
-        "free" if free_variant else "utility",
+        variant_label,
         dry_run,
     )
     logger.info("=" * 60)
 
     # Build context (gives us _seed_fragments side-channel)
-    if free_variant:
+    if conversation_variant and free_variant:
+        ctx = context.build_dream_conversation_context(bird_name)
+    elif free_variant:
         ctx = context.build_dream_free_context(bird_name)
     else:
         ctx = context.build_dream_context(bird_name)
     seed_fragments = ctx.pop("_seed_fragments", {})
 
     # Render template
-    template_path = config.DREAM_FREE_TEMPLATE if free_variant else config.DREAM_TEMPLATE
+    if conversation_variant and free_variant:
+        template_path = config.DREAM_CONVERSATION_TEMPLATE
+    elif free_variant:
+        template_path = config.DREAM_FREE_TEMPLATE
+    else:
+        template_path = config.DREAM_TEMPLATE
     template_text = template_path.read_text()
     rendered_prompt = template_text.format(**ctx)
 
@@ -528,7 +622,7 @@ def run_cycle(
                         bird_name=bird_name,
                         state=state,
                         dry_run=dry_run,
-                        variant="free",
+                        variant=variant_label,  # "conversation" bypasses c1 gate
                     )
                 else:
                     logger.info(
@@ -577,9 +671,52 @@ def run_cycle(
                 "content": result_text,
             })
 
+    # ── c1 conversation retry (Holden, Jun 15 2026) ──
+    # If the FREE (non-conversation) variant produced content but nothing was
+    # stored (c1 gated), retry once with dream.conversation.md.
+    # Skip if conversation was already the primary template.
+    if (free_variant
+            and not conversation_variant
+            and state.store_count == 0
+            and final_content
+            and config.DREAM_CONVERSATION_TEMPLATE.exists()):
+        logger.info("c1 gated — retrying with conversation template")
+        try:
+            conv_ctx = context.build_dream_conversation_context(bird_name)
+            conv_seeds = conv_ctx.pop("_seed_fragments", {})
+            conv_template = config.DREAM_CONVERSATION_TEMPLATE.read_text()
+            conv_prompt = conv_template.format(**conv_ctx)
+
+            retry_response = llama_client.chat(
+                messages=[{"role": "user", "content": conv_prompt}],
+                tools=[],  # no tools — force text output, don't let model
+                           # attempt memory_store instead of dreaming
+                temperature=config.DREAM_TEMPERATURE,
+            )
+            retry_content = retry_response["content"]
+            if retry_content:
+                logger.info("Conversation retry content: %s", retry_content[:200])
+                state.seed_fragments = conv_seeds
+                _execute_dream_store(
+                    args={"content": retry_content},
+                    bird_name=bird_name,
+                    state=state,
+                    dry_run=dry_run,
+                    variant="free",
+                )
+                if state.store_count > 0:
+                    final_content = retry_content
+                    logger.info("Conversation retry SUCCEEDED — c2+ stored")
+                else:
+                    logger.info("Conversation retry also c1 — cycle unproductive")
+            else:
+                logger.info("Conversation retry emitted silence")
+        except Exception as e:
+            logger.warning("Conversation retry failed: %s", e)
+
     summary = {
         "bird_name": bird_name,
-        "variant": "free" if free_variant else "utility",
+        "variant": variant_label,
         "turns": turn + 1,
         "store_count": state.store_count,
         "stored_dream_ids": state.stored_dream_ids,
@@ -654,9 +791,23 @@ def main():
             "FREE" if free_variant else "UTILITY", weight, roll,
         )
 
+    # Within free-type cycles, roll for conversation vs pure free-association.
+    # Conversation variant seeds dreams from Holden's recent conversations.
+    conversation_variant = False
+    if free_variant:
+        conv_weight = config.DREAM_CONVERSATION_VARIANT_WEIGHT
+        conv_roll = random.random()
+        conversation_variant = conv_roll < conv_weight
+        logger.info(
+            "Sub-variant: %s (conv_weight=%.2f, roll=%.3f)",
+            "CONVERSATION" if conversation_variant else "FREE",
+            conv_weight, conv_roll,
+        )
+
     summary = run_cycle(
         bird_name=args.bird_name,
         free_variant=free_variant,
+        conversation_variant=conversation_variant,
         dry_run=args.dry_run,
     )
 

@@ -52,6 +52,7 @@ DATA_DIR = REPO_ROOT / "data"
 THINK_TEMPLATE = TEMPLATES_DIR / "think.md"
 DREAM_TEMPLATE = TEMPLATES_DIR / "dream.md"
 DREAM_FREE_TEMPLATE = TEMPLATES_DIR / "dream.free.md"
+DREAM_CONVERSATION_TEMPLATE = TEMPLATES_DIR / "dream.conversation.md"
 
 # data/dream_nouns.txt is load-bearing infrastructure: it serves as both seed
 # vocabulary for DREAMING context construction AND as the scoring corpus for
@@ -154,6 +155,18 @@ JINA_DOCUMENT_PREFIX = "Represent this passage: "
 # starting point under the assumed-Sonnet design and is superseded.
 # 3-store / 2-send caps remain as safety, not as scope limits.
 MAX_MEMORY_STORE_PER_CYCLE = 3
+
+# Near-duplicate detection threshold for THINKING observations.
+# Before storing, query perp_memories for the most similar existing entry.
+# If similarity >= this threshold, skip the store (it's a near-duplicate).
+# 0.85 catches "recurring theme of duality" variants that differ only
+# in minor phrasing while allowing genuinely new observations through.
+# Env: THINKING_DEDUP_SIMILARITY_THRESHOLD (float, 0.0-1.0).
+try:
+    THINKING_DEDUP_SIMILARITY_THRESHOLD = max(0.0, min(1.0, float(
+        os.environ.get("THINKING_DEDUP_SIMILARITY_THRESHOLD", "0.85"))))
+except (TypeError, ValueError):
+    THINKING_DEDUP_SIMILARITY_THRESHOLD = 0.85
 MAX_AMQ_SEND_PER_CYCLE = 2
 
 # Hard timeout on a single llama-server CHAT request. Generous because
@@ -261,6 +274,15 @@ SOFT_MARKER_COMBINATION_THRESHOLD = 2
 #   collection.query(..., where={"confidence": {"$gte": DREAM_CONFIDENCE_PROMOTION_FLOOR}})
 DREAM_CONFIDENCE_PROMOTION_FLOOR = 2
 
+# Minimum confidence for FREE-variant dreams to be stored.  c1 FREE output
+# is almost entirely degenerate single-word tokens or news-echo —
+# "Drift.", "Echo.", "Matchbox" — that pollute perp_dreams.  Utility c1 is
+# harmless (model just declines memory_store, nothing stored).
+# Set to 2 → only c2+ free dreams reach perp_dreams and the public feed.
+# Env: DREAM_FREE_MIN_CONFIDENCE (int, clamped 1-3, default 2).
+DREAM_FREE_MIN_CONFIDENCE = int(os.environ.get("DREAM_FREE_MIN_CONFIDENCE", "2"))
+DREAM_FREE_MIN_CONFIDENCE = max(1, min(3, DREAM_FREE_MIN_CONFIDENCE))
+
 
 # =============================================================================
 # ChromaDB collection names
@@ -310,6 +332,23 @@ try:
     DREAM_FREE_WEIGHT = max(0.0, min(1.0, float(os.environ.get("DREAM_FREE_WEIGHT", "0.0"))))
 except (TypeError, ValueError):
     DREAM_FREE_WEIGHT = 0.0
+
+# Within free-type cycles, probability of using dream.conversation.md (seeded
+# from Holden's recent conversations) vs dream.free.md (pure noun-cluster
+# free-association). Holden's conversations directly inspire Echo's dreams.
+# Env: DREAM_CONVERSATION_VARIANT_WEIGHT (float, clamped 0-1, default 1.0).
+#   1.0  → every free cycle uses conversation template (TESTING MODE)
+#   0.80 → 80% conversation-seeded, 20% pure free-association (permanent target)
+#   0.0  → never conversation, all free (pre-Jun-15 behavior)
+try:
+    DREAM_CONVERSATION_VARIANT_WEIGHT = max(0.0, min(1.0, float(
+        os.environ.get("DREAM_CONVERSATION_VARIANT_WEIGHT", "0.80"))))
+except (TypeError, ValueError):
+    DREAM_CONVERSATION_VARIANT_WEIGHT = 1.0
+
+# How many recent conversations to pull for conversation-seeded dreams.
+# Multiple fragments give the model a constellation of themes to blend.
+DREAM_CONVERSATION_FRAGMENT_COUNT = int(os.environ.get("DREAM_CONVERSATION_FRAGMENT_COUNT", "3"))
 
 # Saved-chat memories store both sides of a conversation
 # ("Holden: …  Echo: …"). When such a memory seeds a DREAM (not a think

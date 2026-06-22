@@ -1,5 +1,5 @@
 [Unit]
-Description=perpPROMPT DREAMING cadence — bird sleeps every 10-12h
+Description=perpPROMPT DREAMING cadence — bird sleeps every 4-8h (~6h avg)
 Documentation=https://github.com/ASIXicle/perpPROMPT
 
 [Timer]
@@ -8,11 +8,13 @@ Documentation=https://github.com/ASIXicle/perpPROMPT
 # offsets DREAMING from THINKING's cadence so they don't pile up.
 OnBootSec=4h
 
-# 10h base interval + up to 2h randomized delay = 10-12h between cycles.
-# Bird dreams ~2x per day. Asymmetric vs THINKING's ~4-5x per day reflects
-# Wren's design: thinking is foreground work, dreaming is background drift.
-OnUnitActiveSec=10h
-RandomizedDelaySec=2h
+# 4h base interval + up to 4h randomized delay = 4-8h between cycles, ~6h
+# average (~3-4 dreams/day). systemd jitter only ADDS time, so a 4h base + 4h
+# jitter is how we render "6h ± 2h": some cycles fire fast (~4h, catching
+# momentum), some slow (~8h, letting fragments decay). Bumped from 10-12h to
+# feed more DREAM-FREE content to the Bluesky feed (2026-06-02 chorus round).
+OnUnitActiveSec=4h
+RandomizedDelaySec=4h
 
 Persistent=true
 

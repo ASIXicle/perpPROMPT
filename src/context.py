@@ -391,7 +391,7 @@ def _fetch_recent_from_collection(collection, limit: int, where: dict | None = N
     return entries[:limit]
 
 
-def get_random_memory(collection_name: str = "perp_memories", age_cutoff_days: int | None = None) -> dict | None:
+def get_random_memory(collection_name: str = "perp_memories", age_cutoff_days: int | None = None, exclude_types: list[str] | None = None) -> dict | None:
     """Pull one random memory, optionally restricted to memories older than N days.
 
     Used by dream-context assembly: ancient_memory wants something old,
@@ -428,6 +428,8 @@ def get_random_memory(collection_name: str = "perp_memories", age_cutoff_days: i
 
     for i, doc_id in enumerate(ids):
         meta = metas[i] if i < len(metas) else {}
+        if exclude_types and meta.get("memory_type") in exclude_types:
+            continue  # DREAM pool: skip analytical observations (Kite pollution fix)
         stored_at = meta.get("stored_at", "")
         if cutoff_iso and stored_at >= cutoff_iso:
             continue  # skip "recent" entries when we want ancient ones
@@ -455,6 +457,14 @@ def store_observation(
 ) -> str:
     """Store a memory in perp_memories. Returns the assigned ID.
 
+    Near-duplicate detection (Jun 22 2026, Kite): before storing, queries
+    perp_memories for semantically similar content. If the most similar
+    existing entry exceeds THINKING_DEDUP_SIMILARITY_THRESHOLD (default
+    0.85), the store is skipped and the existing entry's ID is returned
+    with a "dedup:" prefix. This breaks the THINKING feedback loop where
+    the same observation ("recurring theme of duality...") gets stored
+    40+ times across cycles.
+
     Standard metadata applied automatically:
       - agent: bird's name
       - stored_at: ISO 8601 UTC timestamp
@@ -462,6 +472,34 @@ def store_observation(
     `derived_from` records dream IDs that informed this observation
     (Wren's audit-trail spec). Empty/None means "not derived from a dream."
     """
+    # ── Near-duplicate detection ──
+    threshold = config.THINKING_DEDUP_SIMILARITY_THRESHOLD
+    if threshold > 0.0:
+        try:
+            collection = _get_perp_memories()
+            if collection.count() > 0:
+                results = collection.query(
+                    query_texts=[content],
+                    n_results=1,
+                )
+                if results and results.get("distances"):
+                    # ChromaDB returns distances, not similarities.
+                    # For cosine distance: similarity = 1 - distance
+                    distances = results["distances"][0]
+                    if distances:
+                        similarity = 1.0 - distances[0]
+                        if similarity >= threshold:
+                            existing_id = results["ids"][0][0] if results.get("ids") else "unknown"
+                            existing_preview = (results["documents"][0][0] or "")[:80] if results.get("documents") else ""
+                            logger.info(
+                                "DEDUP: skipping near-duplicate observation (sim=%.3f >= %.2f). "
+                                "Existing: %s — %s",
+                                similarity, threshold, existing_id, existing_preview,
+                            )
+                            return f"dedup:{existing_id}"
+        except Exception as e:
+            logger.warning("Dedup check failed (storing anyway): %s", e)
+
     memory_id = _generate_memory_id("obs")
     metadata: dict[str, Any] = {
         "agent": bird_name,
@@ -726,9 +764,11 @@ def build_dream_context(bird_name: str) -> dict:
     # bird's OWN turns (drop human/other-agent turns) so the bird dreams in
     # its own voice instead of completing a prompt. _dreamify_memory leaves
     # plain observations untouched. Storage + the think path keep full chats.
-    ancient = _dreamify_memory(get_random_memory("perp_memories", age_cutoff_days=14), bird_name)
-    recent = _dreamify_memory(_get_most_recent_memory("perp_memories"), bird_name)
-    randmem = _dreamify_memory(get_random_memory("perp_memories"), bird_name)
+    # DREAM pool excludes memory_type="observation" so analytical think-cycle
+    # output never seeds a dream (Kite's pollution fix, 2026-06-02 chorus round).
+    ancient = _dreamify_memory(get_random_memory("perp_memories", age_cutoff_days=14, exclude_types=["observation"]), bird_name)
+    recent = _dreamify_memory(_get_most_recent_memory("perp_memories", exclude_types=["observation"]), bird_name)
+    randmem = _dreamify_memory(get_random_memory("perp_memories", exclude_types=["observation"]), bird_name)
     news_item_text = get_dream_news_fragment(seed_noun)
     amq_fragment = get_random_amq_fragment(bird_name)
 
@@ -762,6 +802,92 @@ def build_dream_free_context(bird_name: str) -> dict:
     # to avoid format() KeyError leak. The other slots are identical.
     full.pop("agent_name", None)
     return full
+
+
+def _get_conversation_fragment(seed_hint: str = "") -> str:
+    """Pull recent conversation fragments from perp_memories for dream seeding.
+
+    Pulls the N most recent entries (config.DREAM_CONVERSATION_FRAGMENT_COUNT,
+    default 3) and concatenates them. This gives the model a constellation of
+    recent themes from Holden's conversations to free-associate between.
+
+    Uses chronological ordering (most recent first) so what Holden talked
+    about most recently has the strongest dream influence.
+    """
+    collection = _get_perp_memories()
+    if collection.count() == 0:
+        return "(no conversations yet — only the hum of machines)"
+
+    n = config.DREAM_CONVERSATION_FRAGMENT_COUNT
+
+    try:
+        result = collection.get(
+            include=["documents", "metadatas"],
+        )
+        docs = result.get("documents", [])
+        metas = result.get("metadatas", [])
+
+        # Pair docs, separating conversations from observations
+        conversations = []
+        observations = []
+        for i, doc in enumerate(docs):
+            if not doc or len(doc) < 50:
+                continue
+            meta = metas[i] if i < len(metas) else {}
+            ts = meta.get("stored_at", "1970-01-01")
+            if "[Chat conversation" in doc[:50]:
+                conversations.append((ts, doc))
+            else:
+                observations.append((ts, doc))
+
+        # RANDOM selection (Jun 17 2026, Kite) — dreams are jumbled, not linear.
+        # Most-recent-3 produced coherent, contiguous dreams. Random fragments
+        # from across the entire conversation history create the juxtaposition
+        # and non-linearity that actual dreams have.
+        # Still prioritize conversations: fill N slots from conversations first,
+        # then fill remaining from observations. Within each pool, pick randomly.
+        random.shuffle(conversations)
+        random.shuffle(observations)
+        pool = conversations[:n]
+        if len(pool) < n:
+            pool.extend(observations[:n - len(pool)])
+
+        # Take top N, give conversations more room (350 chars each)
+        fragments = []
+        char_budget = 350  # per fragment — richer context for direct influence
+        for ts, doc in pool[:n]:
+            if len(doc) > char_budget:
+                doc = doc[:char_budget].rsplit(" ", 1)[0] + " …"
+            fragments.append(doc)
+
+        if fragments:
+            return "\n\n---\n\n".join(fragments)
+
+    except Exception as e:
+        logger.warning("Conversation fragment pull failed: %s", e)
+
+    return "(the memory was there, but it dissolved before it could be held)"
+
+
+def build_dream_conversation_context(bird_name: str) -> dict:
+    """Assemble slot values for templates/dream.conversation.md.
+
+    The c1 retry variant: when dream.free.md produces thin output,
+    retry with a Holden conversation fragment as primary stimulus.
+    Keeps dream_seeds for texture. No identity slot (same as free).
+    """
+    nouns_by_cat = _load_dream_nouns_by_category()
+    dream_seeds_str, dream_seeds_list = _build_dream_seed_cluster(nouns_by_cat)
+    conversation = _get_conversation_fragment(seed_hint=dream_seeds_str or "")
+
+    return {
+        "conversation_fragment": conversation,
+        "dream_seeds": dream_seeds_str or "(silence)",
+        "_seed_fragments": {
+            "dream_seeds": dream_seeds_list,
+            "source": "conversation_retry",
+        },
+    }
 
 
 # =============================================================================
@@ -856,15 +982,28 @@ def _dreamify_memory(memory: dict | None, self_name: str) -> dict | None:
     return out
 
 
-def _get_most_recent_memory(collection_name: str) -> dict | None:
-    """Pull the single most-recent memory by stored_at (no semantic filter)."""
+def _get_most_recent_memory(collection_name: str, exclude_types: list[str] | None = None) -> dict | None:
+    """Pull the single most-recent memory by stored_at (no semantic filter).
+
+    exclude_types drops entries by memory_type before returning. The DREAM
+    pool passes ["observation"] so analytical think-cycle output never seeds
+    a dream (Kite's pollution fix, 2026-06-02). Entries lacking a memory_type
+    field are kept (None is never in the exclude list).
+    """
     if collection_name == "perp_dreams":
         collection = _get_perp_dreams()
     else:
         collection = _get_perp_memories()
 
-    entries = _fetch_recent_from_collection(collection, limit=1)
-    return entries[0] if entries else None
+    # When excluding types, fetch a small recent window so we can skip the
+    # excluded entries and still return the most-recent *eligible* one.
+    limit = 25 if exclude_types else 1
+    entries = _fetch_recent_from_collection(collection, limit=limit)
+    for entry in entries:
+        if exclude_types and entry["metadata"].get("memory_type") in exclude_types:
+            continue
+        return entry
+    return None
 
 
 # =============================================================================

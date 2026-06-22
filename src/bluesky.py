@@ -70,8 +70,12 @@ def post_dream(content: str, variant: str) -> list[str]:
     """
     if not config.BLUESKY_ENABLED:
         return []
-    if config.BLUESKY_POST_VARIANTS != "all" and variant != config.BLUESKY_POST_VARIANTS:
-        return []
+    if config.BLUESKY_POST_VARIANTS != "all":
+        allowed = {v.strip() for v in config.BLUESKY_POST_VARIANTS.split(",")}
+        # "conversation" is a sub-variant of "free" — post if either is allowed
+        effective = variant if variant != "conversation" else "free"
+        if effective not in allowed:
+            return []
     if not content or not content.strip():
         return []
     if not config.BLUESKY_HANDLE or not config.BLUESKY_APP_PASSWORD:
